@@ -212,25 +212,46 @@ def main():
                     # Brick collision
                     for brick in bricks:
                         if brick.visible and ball.rect.colliderect(brick.rect):
-                            overlap_left = ball.rect.right - brick.rect.left
-                            overlap_right = brick.rect.right - ball.rect.left
-                            overlap_top = ball.rect.bottom - brick.rect.top
-                            overlap_bottom = brick.rect.bottom - ball.rect.top
                             
-                            min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+                            # Determine collision type based on ball's center relative to brick's slabs
+                            ball_cx, ball_cy = ball.rect.center
+                            brick_left, brick_right = brick.rect.left, brick.rect.right
+                            brick_top, brick_bottom = brick.rect.top, brick.rect.bottom
 
-                            if min_overlap == overlap_top:
+                            in_horiz_slab = brick_left < ball_cx < brick_right
+                            in_vert_slab = brick_top < ball_cy < brick_bottom
+
+                            # Store previous direction to handle repositioning
+                            moving_down = ball.speed_y > 0
+                            moving_right = ball.speed_x > 0
+
+                            if in_horiz_slab:
+                                # Top or bottom collision
                                 ball.speed_y *= -1
-                                ball.rect.bottom = brick.rect.top
-                            elif min_overlap == overlap_bottom:
+                                if moving_down:
+                                    ball.rect.bottom = brick.rect.top
+                                else:
+                                    ball.rect.top = brick.rect.bottom
+                            elif in_vert_slab:
+                                # Left or right collision
+                                ball.speed_x *= -1
+                                if moving_right:
+                                    ball.rect.right = brick.rect.left
+                                else:
+                                    ball.rect.left = brick.rect.right
+                            else:
+                                # Corner collision
                                 ball.speed_y *= -1
-                                ball.rect.top = brick.rect.bottom
-                            elif min_overlap == overlap_left:
                                 ball.speed_x *= -1
-                                ball.rect.right = brick.rect.left
-                            elif min_overlap == overlap_right:
-                                ball.speed_x *= -1
-                                ball.rect.left = brick.rect.right
+                                # Simple repositioning for corners
+                                if moving_down:
+                                    ball.rect.bottom = brick.rect.top
+                                else:
+                                    ball.rect.top = brick.rect.bottom
+                                if moving_right:
+                                    ball.rect.right = brick.rect.left
+                                else:
+                                    ball.rect.left = brick.rect.right
                             
                             ball.normalize_speed()
                             brick.health -= 1

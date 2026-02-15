@@ -23,11 +23,9 @@ BALL_COLOR = (255, 255, 255)
 BALL_SPEED = 6 # Constant speed magnitude
 
 # Bricks
-BRICK_ROWS = 10
-BRICK_COLS = 20
-BRICK_GAP = 1
-BRICK_WIDTH = (SCREEN_WIDTH - (BRICK_COLS + 1) * BRICK_GAP) / BRICK_COLS
-BRICK_HEIGHT = 20
+TOTAL_BRICKS = 200
+BRICK_WIDTH = 50
+BRICK_HEIGHT = 15
 BRICK_COLORS = [(255, 99, 71), (255, 165, 0), (255, 215, 0), (50, 205, 50), (65, 105, 225)]
 
 # --- Game Classes ---
@@ -43,6 +41,13 @@ class Ball:
     def move(self):
         self.rect.x += self.speed_x
         self.rect.y += self.speed_y
+
+    def normalize_speed(self):
+        current_speed = math.sqrt(self.speed_x**2 + self.speed_y**2)
+        if current_speed > 0:
+            scale = BALL_SPEED / current_speed
+            self.speed_x *= scale
+            self.speed_y *= scale
 
     def draw(self, screen):
         pygame.draw.circle(screen, self.color, self.rect.center, self.radius)
@@ -71,21 +76,15 @@ class Brick:
         self.max_health = 1
 
     def get_color(self):
-        # Darken the color based on health
         if self.health <= 1 and self.health == self.max_health:
             return self.base_color
-        
-        # Create a stronger visual for higher health
         if self.health > 1:
-            # Blend with a gray color for durability
-            factor = (self.health -1) / max(self.max_health -1, 1) # 0 to 1
+            factor = (self.health - 1) / max(self.max_health - 1, 1)
             r = int(self.base_color[0] * (1-factor) + 128 * factor)
             g = int(self.base_color[1] * (1-factor) + 128 * factor)
             b = int(self.base_color[2] * (1-factor) + 128 * factor)
             return (r, g, b)
-        
         return self.base_color
-
 
     def draw(self, screen):
         if self.visible:
@@ -108,17 +107,20 @@ def main():
         # --- Stage Setup ---
         paddle = Paddle((SCREEN_WIDTH - PADDLE_WIDTH) / 2, PADDLE_Y_POS, PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_COLOR)
         
-        # Create bricks
+        # Create random bricks
         bricks = []
-        for row in range(BRICK_ROWS):
-            for col in range(BRICK_COLS):
-                brick_x = col * (BRICK_WIDTH + BRICK_GAP) + (BRICK_GAP / 2)
-                brick_y = row * (BRICK_HEIGHT + BRICK_GAP) + 50
-                color = BRICK_COLORS[row % len(BRICK_COLORS)]
-                bricks.append(Brick(brick_x, brick_y, BRICK_WIDTH, BRICK_HEIGHT, color))
+        for _ in range(TOTAL_BRICKS):
+            brick_x = random.randint(0, SCREEN_WIDTH - BRICK_WIDTH)
+            brick_y = random.randint(50, int(SCREEN_HEIGHT / 2))
+            color = random.choice(BRICK_COLORS)
+            new_brick = Brick(brick_x, brick_y, BRICK_WIDTH, BRICK_HEIGHT, color)
+            # Prevent overlap
+            is_overlapping = any(new_brick.rect.colliderect(b.rect) for b in bricks)
+            if not is_overlapping:
+                 bricks.append(new_brick)
 
         # Add health to bricks based on stage
-        if stage > 1:
+        if stage > 1 and bricks:
             num_upgrades = int(len(bricks) * 0.1)
             for _ in range(stage - 1):
                  for _ in range(num_upgrades):
@@ -149,7 +151,7 @@ def main():
                         pygame.quit()
                         sys.exit()
                     if event.key == pygame.K_r:
-                        main() # Easiest way to restart full game
+                        main() 
                         return
 
                 # Launch ball
@@ -157,7 +159,7 @@ def main():
                     if event.type == pygame.MOUSEBUTTONDOWN or (event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE):
                         ball_on_paddle = False
                         for ball in balls:
-                            ball.speed_y = -BALL_SPEED # Launch straight up
+                            ball.speed_y = -BALL_SPEED 
 
             # --- Game Logic ---
             if ball_on_paddle:
@@ -167,15 +169,24 @@ def main():
             else:
                 for ball in balls[:]:
                     ball.move()
-                    # Wall collision
-                    if ball.rect.left <= 0 or ball.rect.right >= SCREEN_WIDTH: ball.speed_x *= -1
-                    if ball.rect.top <= 0: ball.speed_y *= -1
-                    # Bottom wall collision
+                    
+                    # Wall collision with random angle
+                    if ball.rect.left <= 0 or ball.rect.right >= SCREEN_WIDTH:
+                        ball.speed_x *= -1
+                        ball.speed_y += random.uniform(-0.5, 0.5)
+                        ball.normalize_speed()
+                    if ball.rect.top <= 0:
+                        ball.speed_y *= -1
+                        ball.speed_x += random.uniform(-0.5, 0.5)
+                        ball.normalize_speed()
                     if ball.rect.bottom >= SCREEN_HEIGHT:
                         if DEBUG:
                             ball.speed_y *= -1
+                            ball.speed_x += random.uniform(-0.5, 0.5)
+                            ball.normalize_speed()
                         else:
                             balls.remove(ball)
+                    
                     # Paddle collision
                     if ball.rect.colliderect(paddle.rect) and ball.speed_y > 0:
                         offset = (ball.rect.centerx - paddle.rect.centerx) / (PADDLE_WIDTH / 2)
@@ -184,36 +195,52 @@ def main():
                         angle_rad = math.radians(final_angle_deg - 90)
                         ball.speed_x = BALL_SPEED * math.cos(angle_rad)
                         ball.speed_y = BALL_SPEED * math.sin(angle_rad)
-
+                    
                     # Brick collision
                     for brick in bricks:
                         if brick.visible and ball.rect.colliderect(brick.rect):
+                            overlap_left = ball.rect.right - brick.rect.left
+                            overlap_right = brick.rect.right - ball.rect.left
+                            overlap_top = ball.rect.bottom - brick.rect.top
+                            overlap_bottom = brick.rect.bottom - ball.rect.top
+                            
+                            min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+
+                            if min_overlap == overlap_top:
+                                ball.speed_y *= -1
+                                ball.rect.bottom = brick.rect.top
+                            elif min_overlap == overlap_bottom:
+                                ball.speed_y *= -1
+                                ball.rect.top = brick.rect.bottom
+                            elif min_overlap == overlap_left:
+                                ball.speed_x *= -1
+                                ball.rect.right = brick.rect.left
+                            elif min_overlap == overlap_right:
+                                ball.speed_x *= -1
+                                ball.rect.left = brick.rect.right
+                            
                             brick.health -= 1
                             score += 10
-                            if brick.health <= 0:
-                                brick.visible = False
-                            ball.speed_y *= -1 # Simple reflection
+                            if brick.health <= 0: brick.visible = False
                             break
 
             # --- State Checks ---
-            if not any(b.visible for b in bricks): # Stage win
+            if not any(b.visible for b in bricks):
                 stage += 1
                 screen.fill(BG_COLOR)
                 win_text = font.render(f"Stage {stage-1} Clear!", True, TEXT_COLOR)
-                screen.blit(win_text, (SCREEN_WIDTH/2 - win_text.get_width()/2, SCREEN_HEIGHT/2 - win_text.get_height()/2))
+                screen.blit(win_text, (win_text.get_rect(center=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2))))
                 pygame.display.flip()
                 pygame.time.wait(2000)
-                level_running = False # End level loop to start next stage
+                level_running = False 
 
-            if not balls and not DEBUG: # Game Over
+            if not balls and not DEBUG:
                 screen.fill(BG_COLOR)
                 text = font.render("GAME OVER", True, TEXT_COLOR)
                 subtext = small_font.render("Press 'R' to Restart or 'ESC' to Quit", True, TEXT_COLOR)
-                screen.blit(text, (SCREEN_WIDTH/2 - text.get_width()/2, SCREEN_HEIGHT/2 - text.get_height()/2))
-                screen.blit(subtext, (SCREEN_WIDTH/2 - subtext.get_width()/2, SCREEN_HEIGHT/2 + text.get_height()/2))
+                screen.blit(text, (text.get_rect(center=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 - 20))))
+                screen.blit(subtext, (subtext.get_rect(center=(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + 20))))
                 pygame.display.flip()
-                
-                # Wait for player input
                 waiting = True
                 while waiting:
                     for event in pygame.event.get():
@@ -221,25 +248,28 @@ def main():
                             pygame.quit()
                             sys.exit()
                         if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                            main() # Restart
+                            main()
                             return
 
             # --- Drawing ---
             screen.fill(BG_COLOR)
             paddle.draw(screen)
-            for ball in balls:
-                ball.draw(screen)
-            for brick in bricks:
-                brick.draw(screen)
+            for ball in balls: ball.draw(screen)
+            for brick in bricks: brick.draw(screen)
+            
+            remaining_bricks = sum(1 for b in bricks if b.visible)
             
             score_text = small_font.render(f"Score: {score}", True, TEXT_COLOR)
             stage_text = small_font.render(f"Stage: {stage}", True, TEXT_COLOR)
+            bricks_text = small_font.render(f"Bricks: {remaining_bricks}", True, TEXT_COLOR)
+            
             screen.blit(score_text, (10, 10))
+            screen.blit(bricks_text, (10, 40))
             screen.blit(stage_text, (SCREEN_WIDTH - stage_text.get_width() - 10, 10))
 
             if DEBUG:
                 debug_text = small_font.render("DEBUG MODE", True, (255, 0, 0))
-                screen.blit(debug_text, (SCREEN_WIDTH / 2 - debug_text.get_width() / 2, 10))
+                screen.blit(debug_text, (debug_text.get_rect(centerx=SCREEN_WIDTH/2)))
 
             pygame.display.flip()
             clock.tick(60)

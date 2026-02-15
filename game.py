@@ -24,9 +24,8 @@ BALL_COLOR = (255, 255, 255)
 BALL_SPEED = 6 # Constant speed magnitude
 
 # Bricks
-TOTAL_BRICKS = 200
-BRICK_WIDTH = 50
-BRICK_HEIGHT = 15
+TOTAL_BRICKS = 80 # Reduced for larger polygon bricks
+BRICK_RADIUS = 25
 BRICK_COLORS = [(255, 99, 71), (255, 165, 0), (255, 215, 0), (50, 205, 50), (65, 105, 225)]
 
 # --- Game Classes ---
@@ -70,12 +69,33 @@ class Paddle:
         pygame.draw.rect(screen, self.color, self.rect)
 
 class Brick:
-    def __init__(self, x, y, width, height, base_color):
-        self.rect = pygame.Rect(x, y, width, height)
+    def __init__(self, center_x, center_y, radius, num_sides, base_color):
+        self.center = (center_x, center_y)
+        self.radius = radius # Radius of the circumcircle
+        self.num_sides = num_sides
         self.base_color = base_color
+        self.vertices = self._generate_vertices()
+        # Bounding box for broad-phase collision detection
+        min_x = min(v[0] for v in self.vertices)
+        max_x = max(v[0] for v in self.vertices)
+        min_y = min(v[1] for v in self.vertices)
+        max_y = max(v[1] for v in self.vertices)
+        self.rect = pygame.Rect(min_x, min_y, max_x - min_x, max_y - min_y)
+        
         self.visible = True
         self.health = 1
         self.max_health = 1
+
+    def _generate_vertices(self):
+        vertices = []
+        # Start angle rotated by half a step to make shapes like triangles and hexagons flat on top
+        start_angle = -90 - (180 / self.num_sides) if self.num_sides % 2 == 0 else -90
+        for i in range(self.num_sides):
+            angle = math.radians(i * (360 / self.num_sides) + start_angle)
+            x = self.center[0] + self.radius * math.cos(angle)
+            y = self.center[1] + self.radius * math.sin(angle)
+            vertices.append((x, y))
+        return vertices
 
     def get_color(self):
         if self.health <= 1 and self.health == self.max_health:
@@ -90,7 +110,7 @@ class Brick:
 
     def draw(self, screen):
         if self.visible:
-            pygame.draw.rect(screen, self.get_color(), self.rect)
+            pygame.draw.polygon(screen, self.get_color(), self.vertices)
 
 # --- Main Game Function ---
 
@@ -112,14 +132,20 @@ def main():
         # Create random bricks
         bricks = []
         for _ in range(TOTAL_BRICKS):
-            brick_x = random.randint(0, SCREEN_WIDTH - BRICK_WIDTH)
-            brick_y = random.randint(50, int(SCREEN_HEIGHT / 2))
-            color = random.choice(BRICK_COLORS)
-            new_brick = Brick(brick_x, brick_y, BRICK_WIDTH, BRICK_HEIGHT, color)
-            # Prevent overlap
-            is_overlapping = any(new_brick.rect.colliderect(b.rect) for b in bricks)
-            if not is_overlapping:
-                 bricks.append(new_brick)
+            # Try to place a brick, but give up after a few tries to avoid infinite loops
+            for _ in range(20): # More retries for better packing
+                center_x = random.randint(BRICK_RADIUS, SCREEN_WIDTH - BRICK_RADIUS)
+                center_y = random.randint(50 + BRICK_RADIUS, int(SCREEN_HEIGHT / 1.8))
+                num_sides = random.randint(3, 8)
+                color = random.choice(BRICK_COLORS)
+                
+                new_brick = Brick(center_x, center_y, BRICK_RADIUS, num_sides, color)
+
+                # Prevent overlap using bounding boxes for simplicity
+                is_overlapping = any(new_brick.rect.colliderect(b.rect) for b in bricks)
+                if not is_overlapping:
+                    bricks.append(new_brick)
+                    break
 
         # Add health to bricks based on stage
         if stage > 1 and bricks:

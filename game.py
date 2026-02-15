@@ -5,6 +5,7 @@ import sys
 
 # --- Constants ---
 DEBUG = True # Set to True to test with 16 balls
+DEBUG_balls = 32
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -44,6 +45,15 @@ class Ball:
         self.rect.y += self.speed_y
 
     def normalize_speed(self):
+        MIN_VERTICAL_RATIO = 0.1 # Prevent angle from being too horizontal
+        min_y_speed = self.speed * MIN_VERTICAL_RATIO
+        
+        if abs(self.speed_y) < min_y_speed:
+            if self.speed_y == 0:
+                self.speed_y = min_y_speed * random.choice([-1, 1])
+            else:
+                self.speed_y = min_y_speed if self.speed_y > 0 else -min_y_speed
+
         current_speed = math.sqrt(self.speed_x**2 + self.speed_y**2)
         if current_speed > 0:
             scale = self.speed / current_speed
@@ -132,7 +142,7 @@ def main():
         # Create balls
         balls = []
         ball_on_paddle = True
-        num_balls = 16 if DEBUG else 1
+        num_balls = DEBUG_balls if DEBUG else 1
         for _ in range(num_balls):
             ball = Ball(paddle.rect.centerx, paddle.rect.top - BALL_RADIUS, BALL_RADIUS, BALL_COLOR, 0, 0)
             balls.append(ball)
@@ -193,7 +203,7 @@ def main():
                         ball.speed += 0.2
                         offset = (ball.rect.centerx - paddle.rect.centerx) / (PADDLE_WIDTH / 2)
                         angle_deg = offset * 80 + random.uniform(-5, 5)
-                        final_angle_deg = max(-85, min(85, angle_deg))
+                        final_angle_deg = max(-80, min(80, angle_deg))
                         angle_rad = math.radians(final_angle_deg - 90)
                         ball.speed_x = ball.speed * math.cos(angle_rad)
                         ball.speed_y = ball.speed * math.sin(angle_rad)

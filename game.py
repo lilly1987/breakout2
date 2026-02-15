@@ -49,10 +49,10 @@ class Ball:
         min_y_speed = self.speed * MIN_VERTICAL_RATIO
         
         if abs(self.speed_y) < min_y_speed:
-            if self.speed_y == 0:
-                self.speed_y = min_y_speed * random.choice([-1, 1])
+            if self.speed_y >= 0: # If 0, will become positive
+                self.speed_y = min_y_speed
             else:
-                self.speed_y = min_y_speed if self.speed_y > 0 else -min_y_speed
+                self.speed_y = -min_y_speed
 
         current_speed = math.sqrt(self.speed_x**2 + self.speed_y**2)
         if current_speed > 0:
@@ -181,19 +181,19 @@ def main():
                 for ball in balls[:]:
                     ball.move()
                     
-                    # Wall collision with random angle
+                    # Wall collision
                     if ball.rect.left <= 0 or ball.rect.right >= SCREEN_WIDTH:
+                        ball.speed += 0.2
                         ball.speed_x *= -1
-                        ball.speed_y += random.uniform(-0.5, 0.5)
                         ball.normalize_speed()
                     if ball.rect.top <= 0:
+                        ball.speed += 0.2
                         ball.speed_y *= -1
-                        ball.speed_x += random.uniform(-0.5, 0.5)
                         ball.normalize_speed()
                     if ball.rect.bottom >= SCREEN_HEIGHT:
                         if DEBUG:
+                            ball.speed += 0.2
                             ball.speed_y *= -1
-                            ball.speed_x += random.uniform(-0.5, 0.5)
                             ball.normalize_speed()
                         else:
                             balls.remove(ball)
@@ -202,11 +202,12 @@ def main():
                     if ball.rect.colliderect(paddle.rect) and ball.speed_y > 0:
                         ball.speed += 0.2
                         offset = (ball.rect.centerx - paddle.rect.centerx) / (PADDLE_WIDTH / 2)
-                        angle_deg = offset * 80 + random.uniform(-5, 5)
+                        angle_deg = offset * 80
                         final_angle_deg = max(-80, min(80, angle_deg))
                         angle_rad = math.radians(final_angle_deg - 90)
                         ball.speed_x = ball.speed * math.cos(angle_rad)
                         ball.speed_y = ball.speed * math.sin(angle_rad)
+                        ball.normalize_speed()
                     
                     # Brick collision
                     for brick in bricks:
@@ -220,19 +221,15 @@ def main():
 
                             if min_overlap == overlap_top:
                                 ball.speed_y *= -1
-                                ball.speed_x += random.uniform(-0.5, 0.5)
                                 ball.rect.bottom = brick.rect.top
                             elif min_overlap == overlap_bottom:
                                 ball.speed_y *= -1
-                                ball.speed_x += random.uniform(-0.5, 0.5)
                                 ball.rect.top = brick.rect.bottom
                             elif min_overlap == overlap_left:
                                 ball.speed_x *= -1
-                                ball.speed_y += random.uniform(-0.5, 0.5)
                                 ball.rect.right = brick.rect.left
                             elif min_overlap == overlap_right:
                                 ball.speed_x *= -1
-                                ball.speed_y += random.uniform(-0.5, 0.5)
                                 ball.rect.left = brick.rect.right
                             
                             ball.normalize_speed()

@@ -37,6 +37,7 @@ class Ball:
         self.speed_x = speed_x
         self.speed_y = speed_y
         self.radius = radius
+        self.speed = BALL_SPEED
 
     def move(self):
         self.rect.x += self.speed_x
@@ -45,7 +46,7 @@ class Ball:
     def normalize_speed(self):
         current_speed = math.sqrt(self.speed_x**2 + self.speed_y**2)
         if current_speed > 0:
-            scale = BALL_SPEED / current_speed
+            scale = self.speed / current_speed
             self.speed_x *= scale
             self.speed_y *= scale
 
@@ -159,7 +160,7 @@ def main():
                     if event.type == pygame.MOUSEBUTTONDOWN or (event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE):
                         ball_on_paddle = False
                         for ball in balls:
-                            ball.speed_y = -BALL_SPEED 
+                            ball.speed_y = -ball.speed 
 
             # --- Game Logic ---
             if ball_on_paddle:
@@ -189,12 +190,13 @@ def main():
                     
                     # Paddle collision
                     if ball.rect.colliderect(paddle.rect) and ball.speed_y > 0:
+                        ball.speed += 0.2
                         offset = (ball.rect.centerx - paddle.rect.centerx) / (PADDLE_WIDTH / 2)
                         angle_deg = offset * 80 + random.uniform(-5, 5)
                         final_angle_deg = max(-85, min(85, angle_deg))
                         angle_rad = math.radians(final_angle_deg - 90)
-                        ball.speed_x = BALL_SPEED * math.cos(angle_rad)
-                        ball.speed_y = BALL_SPEED * math.sin(angle_rad)
+                        ball.speed_x = ball.speed * math.cos(angle_rad)
+                        ball.speed_y = ball.speed * math.sin(angle_rad)
                     
                     # Brick collision
                     for brick in bricks:
@@ -208,17 +210,22 @@ def main():
 
                             if min_overlap == overlap_top:
                                 ball.speed_y *= -1
+                                ball.speed_x += random.uniform(-0.5, 0.5)
                                 ball.rect.bottom = brick.rect.top
                             elif min_overlap == overlap_bottom:
                                 ball.speed_y *= -1
+                                ball.speed_x += random.uniform(-0.5, 0.5)
                                 ball.rect.top = brick.rect.bottom
                             elif min_overlap == overlap_left:
                                 ball.speed_x *= -1
+                                ball.speed_y += random.uniform(-0.5, 0.5)
                                 ball.rect.right = brick.rect.left
                             elif min_overlap == overlap_right:
                                 ball.speed_x *= -1
+                                ball.speed_y += random.uniform(-0.5, 0.5)
                                 ball.rect.left = brick.rect.right
                             
+                            ball.normalize_speed()
                             brick.health -= 1
                             score += 10
                             if brick.health <= 0: brick.visible = False

@@ -45,15 +45,6 @@ class Ball:
         self.rect.y += self.speed_y
 
     def normalize_speed(self):
-        MIN_VERTICAL_RATIO = 0.1 # Prevent angle from being too horizontal
-        min_y_speed = self.speed * MIN_VERTICAL_RATIO
-        
-        if abs(self.speed_y) < min_y_speed:
-            if self.speed_y >= 0: # If 0, will become positive
-                self.speed_y = min_y_speed
-            else:
-                self.speed_y = -min_y_speed
-
         current_speed = math.sqrt(self.speed_x**2 + self.speed_y**2)
         if current_speed > 0:
             scale = self.speed / current_speed
@@ -181,24 +172,48 @@ def main():
                 for ball in balls[:]:
                     ball.move()
                     
-                    # Wall collision
-                    if ball.rect.left <= 0 or ball.rect.right >= SCREEN_WIDTH:
-                        ball.speed += 0.2
-                        ball.speed_x *= -1
-                        ball.normalize_speed()
+                    v = (ball.speed_x, ball.speed_y)
+                    reflected = False
+
+                    # --- Wall Collision using Reflection ---
+                    if ball.rect.left <= 0:
+                        n = (1, 0)
+                        dot = v[0]*n[0] + v[1]*n[1]
+                        v = (v[0] - 2*dot*n[0], v[1] - 2*dot*n[1])
+                        ball.rect.left = 0
+                        reflected = True
+                    elif ball.rect.right >= SCREEN_WIDTH:
+                        n = (-1, 0)
+                        dot = v[0]*n[0] + v[1]*n[1]
+                        v = (v[0] - 2*dot*n[0], v[1] - 2*dot*n[1])
+                        ball.rect.right = SCREEN_WIDTH
+                        reflected = True
+
                     if ball.rect.top <= 0:
-                        ball.speed += 0.2
-                        ball.speed_y *= -1
-                        ball.normalize_speed()
-                    if ball.rect.bottom >= SCREEN_HEIGHT:
+                        n = (0, 1)
+                        dot = v[0]*n[0] + v[1]*n[1]
+                        v = (v[0] - 2*dot*n[0], v[1] - 2*dot*n[1])
+                        ball.rect.top = 0
+                        reflected = True
+                    elif ball.rect.bottom >= SCREEN_HEIGHT:
                         if DEBUG:
-                            ball.speed += 0.2
-                            ball.speed_y *= -1
-                            ball.normalize_speed()
+                            n = (0, -1)
+                            dot = v[0]*n[0] + v[1]*n[1]
+                            v = (v[0] - 2*dot*n[0], v[1] - 2*dot*n[1])
+                            ball.rect.bottom = SCREEN_HEIGHT
+                            reflected = True
                         else:
                             balls.remove(ball)
+                            continue
                     
-                    # Paddle collision
+                    if reflected:
+                        ball.speed_x, ball.speed_y = v
+                        ball.speed += 0.2
+                        ball.normalize_speed()
+                        # After wall collision, skip other collision checks for this frame
+                        continue
+
+                    # --- Paddle Collision (Special Gameplay Logic) ---
                     if ball.rect.colliderect(paddle.rect) and ball.speed_y > 0:
                         ball.speed += 0.2
                         offset = (ball.rect.centerx - paddle.rect.centerx) / (PADDLE_WIDTH / 2)
@@ -208,56 +223,64 @@ def main():
                         ball.speed_x = ball.speed * math.cos(angle_rad)
                         ball.speed_y = ball.speed * math.sin(angle_rad)
                         ball.normalize_speed()
-                    
-                    # Brick collision
+                        # After paddle collision, skip other collision checks for this frame
+                        continue
+
+                    # --- Brick Collision using Reflection ---
+                    collided_brick = None
                     for brick in bricks:
                         if brick.visible and ball.rect.colliderect(brick.rect):
-                            
-                            # Determine collision type based on ball's center relative to brick's slabs
-                            ball_cx, ball_cy = ball.rect.center
-                            brick_left, brick_right = brick.rect.left, brick.rect.right
-                            brick_top, brick_bottom = brick.rect.top, brick.rect.bottom
-
-                            in_horiz_slab = brick_left < ball_cx < brick_right
-                            in_vert_slab = brick_top < ball_cy < brick_bottom
-
-                            # Store previous direction to handle repositioning
-                            moving_down = ball.speed_y > 0
-                            moving_right = ball.speed_x > 0
-
-                            if in_horiz_slab:
-                                # Top or bottom collision
-                                ball.speed_y *= -1
-                                if moving_down:
-                                    ball.rect.bottom = brick.rect.top
-                                else:
-                                    ball.rect.top = brick.rect.bottom
-                            elif in_vert_slab:
-                                # Left or right collision
-                                ball.speed_x *= -1
-                                if moving_right:
-                                    ball.rect.right = brick.rect.left
-                                else:
-                                    ball.rect.left = brick.rect.right
-                            else:
-                                # Corner collision
-                                ball.speed_y *= -1
-                                ball.speed_x *= -1
-                                # Simple repositioning for corners
-                                if moving_down:
-                                    ball.rect.bottom = brick.rect.top
-                                else:
-                                    ball.rect.top = brick.rect.bottom
-                                if moving_right:
-                                    ball.rect.right = brick.rect.left
-                                else:
-                                    ball.rect.left = brick.rect.right
-                            
-                            ball.normalize_speed()
-                            brick.health -= 1
-                            score += 10
-                            if brick.health <= 0: brick.visible = False
+                            collided_brick = brick
                             break
+                    
+                    if collided_brick:
+                        brick = collided_brick
+                        
+                        # Find the closest point on the brick to the ball's center
+                        closest_x = max(brick.rect.left, min(ball.rect.centerx, brick.rect.right))
+                        closest_y = max(brick.rect.top, min(ball.rect.centery, brick.rect.bottom))
+
+                        # Calculate normal vector from closest point to ball center
+                        nx = ball.rect.centerx - closest_x
+                        ny = ball.rect.centery - closest_y
+                        
+                        dist = math.sqrt(nx**2 + ny**2)
+
+                        # Reposition the ball to be just outside the brick to prevent sticking.
+                        # This is a critical step for robust collision.
+                        if dist < ball.radius:
+                            overlap = ball.radius - dist + 1 # +1 for a small nudge
+                            # Move ball back along its path to the point of collision
+                            speed_magnitude = math.sqrt(ball.speed_x**2 + ball.speed_y**2)
+                            if speed_magnitude > 0:
+                                ball.rect.x -= (ball.speed_x / speed_magnitude) * overlap
+                                ball.rect.y -= (ball.speed_y / speed_magnitude) * overlap
+
+                        # Re-calculate closest point and normal after repositioning for accuracy
+                        closest_x = max(brick.rect.left, min(ball.rect.centerx, brick.rect.right))
+                        closest_y = max(brick.rect.top, min(ball.rect.centery, brick.rect.bottom))
+                        nx = ball.rect.centerx - closest_x
+                        ny = ball.rect.centery - closest_y
+                        dist = math.sqrt(nx**2 + ny**2)
+
+                        # Normalize the normal vector
+                        if dist != 0:
+                            nx /= dist
+                            ny /= dist
+                        else: # Fallback if ball center is exactly on the closest point
+                            nx, ny = (0, -1)
+
+                        # Reflect velocity using the calculated normal
+                        v = (ball.speed_x, ball.speed_y)
+                        dot_product = v[0] * nx + v[1] * ny
+                        ball.speed_x = v[0] - 2 * dot_product * nx
+                        ball.speed_y = v[1] - 2 * dot_product * ny
+
+                        ball.normalize_speed()
+
+                        brick.health -= 1
+                        score += 10
+                        if brick.health <= 0: brick.visible = False
 
             # --- State Checks ---
             if not any(b.visible for b in bricks):
